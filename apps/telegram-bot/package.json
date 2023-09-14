@@ -1,0 +1,17 @@
+{
+  "name": "telegram-bot",
+  "module": "bot.ts",
+  "type": "module",
+  "devDependencies": {
+    "@types/signale": "^1.4.4",
+    "bun-types": "latest"
+  },
+  "peerDependencies": {
+    "typescript": "^5.0.0"
+  },
+  "dependencies": {
+    "chalk": "^5.3.0",
+    "fp-ts": "^2.16.1",
+    "signale": "^1.4.0"
+  }
+}
