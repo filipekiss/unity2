@@ -3,13 +3,15 @@
   "module": "index.ts",
   "type": "module",
   "devDependencies": {
-    "bun-types": "latest"
-  },
-  "peerDependencies": {
-    "typescript": "^5.0.0"
+    "better-sqlite3": "^8.6.0",
+    "drizzle-kit": "^0.19.13",
+    "typescript": "^5.2.2"
   },
   "dependencies": {
-    "grammy": "^1.18.1"
+    "chalk": "^5.3.0",
+    "drizzle-orm": "^0.28.6",
+    "grammy": "^1.18.1",
+    "grammy-utils": "workspace:*"
   },
   "workspaces": [
     "apps/*",

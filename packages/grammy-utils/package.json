@@ -1,0 +1,15 @@
+{
+  "name": "grammy-utils",
+  "module": "index.ts",
+  "type": "module",
+  "devDependencies": {
+    "@types/debug": "^4.1.8",
+    "bun-types": "latest"
+  },
+  "peerDependencies": {
+    "typescript": "^5.0.0"
+  },
+  "dependencies": {
+    "debug": "^4.3.4"
+  }
+}

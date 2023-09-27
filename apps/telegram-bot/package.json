@@ -2,16 +2,24 @@
   "name": "telegram-bot",
   "module": "bot.ts",
   "type": "module",
+  "scripts": {
+    "dev": "bun --watch ./bot.ts",
+    "start": "bun ./bot.ts",
+    "sqlite:push": "bunx drizzle-kit push:sqlite",
+    "sqlite:generate": "bunx drizzle-kit generate:sqlite",
+    "sqlite:migrate": "bun ./scripts/migrate.ts"
+  },
   "devDependencies": {
     "@types/signale": "^1.4.4",
-    "bun-types": "latest"
+    "bun-types": "latest",
+    "drizzle-kit": "^0.19.13",
+    "ts-node": "10.9.1"
   },
   "peerDependencies": {
     "typescript": "^5.0.0"
   },
   "dependencies": {
-    "chalk": "^5.3.0",
-    "fp-ts": "^2.16.1",
-    "signale": "^1.4.0"
+    "drizzle-orm": "^0.28.6",
+    "fp-ts": "^2.16.1"
   }
 }
