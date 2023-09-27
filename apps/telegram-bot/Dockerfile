@@ -6,7 +6,7 @@ WORKDIR ${APP_DIR}
 
 COPY ./ .
 
-RUN bun install --frozen-lockfile
+RUN bun install
 
 ENTRYPOINT ["bun", "--cwd", "./apps/telegram-bot"]
 CMD ["start"]
