@@ -9,10 +9,3 @@ services:
       - ./apps/telegram-bot/.env.local
     environment:
       - NODE_ENV=production
-      - DATABASE_URL=/var/unity2/db.sqlite
-    volumes:
-      - ${UNITY2_DATA:-unity2data}:/var/unity2
-      - ${PWD}:/opt/unity2/
-
-volumes:
-  unity2data:

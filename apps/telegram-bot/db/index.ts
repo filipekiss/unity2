@@ -1,12 +1,15 @@
-import Database from "bun:sqlite";
-import { DATABASE_URL } from "~/constants";
+import { Client, createClient } from "@libsql/client";
+import { DATABASE_URL, TURSO_TOKEN } from "~/constants";
 
-let dbInstance: Database;
+let dbInstance: Client;
 
 export const getDbInstance = () => {
   if (dbInstance) {
     return dbInstance;
   }
-  dbInstance = new Database(DATABASE_URL, { create: true });
+  dbInstance = createClient({
+    url: DATABASE_URL,
+    authToken: TURSO_TOKEN,
+  });
   return dbInstance;
 };

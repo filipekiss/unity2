@@ -1,16 +1,14 @@
-import { Database } from "bun:sqlite";
 import chalk from "chalk";
 import { CommandContext, Composer, Context, matchFilter } from "grammy";
 import { oda, withNext } from "grammy-utils";
 import { isAnyGroupChat } from "grammy-utils/filter-is-group";
 import { Message } from "grammy/types";
-import { DATABASE_URL } from "~/constants";
 import { summaryMessagesTable } from "./schema";
 import { flow } from "fp-ts/lib/function";
 import { contextReply } from "~/telegram/messages";
 import { and, eq } from "drizzle-orm";
-import { drizzle } from "drizzle-orm/bun-sqlite";
 import { getDbInstance } from "~/db";
+import { drizzle } from "drizzle-orm/libsql";
 
 const messagesDB = drizzle(getDbInstance(), {
   schema: {

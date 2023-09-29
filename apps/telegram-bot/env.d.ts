@@ -4,6 +4,7 @@ export interface IProcessEnv {
   BOT_USERNAME: string;
   OPENAPI_KEY: string;
   SQLITE_DATA_DIR: string;
+  TURSO_TOKEN: string;
 }
 declare global {
   namespace NodeJS {

@@ -23,9 +23,15 @@ export function useEnvOrDefault(
   return process.env[name as string] as string;
 }
 
-export function requireEnvOrAbort(name: LooseAutocomplete<StringKeys>) {
+export function useEnvOrAbort(name: LooseAutocomplete<StringKeys>) {
   if (process.env[name as string] === undefined) {
     throw new Error(`process.env.${name} must be set. Aborting…`);
   }
   return process.env[name as string] as string;
+}
+
+export function useEnvOrNothing(name: LooseAutocomplete<StringKeys>) {
+  return process.env[name as string]
+    ? (process.env[name as string] as string)
+    : undefined;
 }

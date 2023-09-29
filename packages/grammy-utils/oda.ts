@@ -85,7 +85,7 @@ const banner = (
 };
 
 const labeledMessage = (
-  { label, message }: { label: string; message: string },
+  { label, message }: { label: string; message?: string },
   options: LabelOptions = {
     label: { red: true, bold: true, dim: true },
     message: { green: true },
@@ -109,11 +109,13 @@ const labeledMessage = (
     return chalkInstance;
   }, chalk);
 
-  return `${labelColorFunction(label)}: ${messageColorFunction(message)}`;
+  return `${labelColorFunction(label)}: ${messageColorFunction(
+    message ? message : "(UNDEFINED)"
+  )}`;
 };
 
 const fromObjectToLabeledMessage = (
-  obj: Record<string, string>,
+  obj: Record<string, string | undefined>,
   options?: LabelOptions
 ) =>
   Object.entries(obj).map(([label, message]) => {
