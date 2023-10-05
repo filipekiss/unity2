@@ -63,7 +63,7 @@ if (enableDebugMiddleware) {
 }
 
 /* Add modules */
-bot.use(SummaryModule);
+// bot.use(SummaryModule);
 
 export async function run() {
   /* Setup Bot Instance */
