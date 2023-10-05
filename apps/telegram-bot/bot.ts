@@ -1,123 +1,74 @@
+import { FileApiFlavor, FileFlavor } from "@grammyjs/files";
+import {
+  HydrateApiFlavor,
+  HydrateFlavor,
+  hydrateApi,
+  hydrateContext,
+} from "@grammyjs/hydrate";
 import chalk from "chalk";
 import { flow, pipe } from "fp-ts/lib/function";
-import { Bot } from "grammy";
+import { Api, Bot, Context } from "grammy";
 import { DebugMiddleware, oda } from "grammy-utils";
-import * as CONSTANTS from "~/constants";
-import { useEnvOrDefault } from "./utils";
 import { SummaryModule } from "~/modules/summary";
-import { getDbInstance } from "./db";
-import { migrateBot } from "./scripts/migrate";
 
-async function run() {
-  const bot_banner = `                                                            
-                        ███   █████                ████████ 
-                       ░░░   ░░███                ███░░░░███
- █████ ████ ████████   ████  ███████   █████ ████░░░    ░███
-░░███ ░███ ░░███░░███ ░░███ ░░░███░   ░░███ ░███    ███████ 
- ░███ ░███  ░███ ░███  ░███   ░███     ░███ ░███   ███░░░░  
- ░███ ░███  ░███ ░███  ░███   ░███ ███ ░███ ░███  ███      █
- ░░████████ ████ █████ █████  ░░█████  ░░███████ ░██████████
-  ░░░░░░░░ ░░░░ ░░░░░ ░░░░░    ░░░░░    ░░░░░███ ░░░░░░░░░░ 
-                                        ███ ░███            
-                                       ░░██████             
-                                        ░░░░░░              
-                                                            `;
+export type Unity2Context = HydrateFlavor<FileFlavor<Context>>;
+export type Unity2Api = HydrateApiFlavor<FileApiFlavor<Api>>;
+export type Unity2Bot = Bot<Unity2Context, Unity2Api>;
+export type Unity2Message = NonNullable<Unity2Context["msg"]>;
+export type Unity2User = NonNullable<Unity2Context["from"]>;
+export type Unity2Chat = NonNullable<Unity2Context["chat"]>;
 
-  if (process.env.DISABLE_UNITY2_BANNER !== "yes") {
-    const lines = bot_banner.split("\n");
-    lines.forEach(flow((line) => chalk.bgMagenta.white(line), oda.debug));
-  }
+const bot = new Bot<Unity2Context, Unity2Api>(process.env.BOT_TOKEN);
 
-  /* This function allows us to redact secrets from the logs */
-  oda.addDebugSecret(process.env.BOT_TOKEN);
+bot.use(hydrateContext());
+bot.api.config.use(hydrateApi());
 
-  oda.system(oda.banner("CONSTANTS", { red: true }));
+/* Setup shutdown signal handling */
 
-  oda
-    .fromObjectToLabeledMessage(
-      {
-        ...CONSTANTS,
-      },
-      {
-        label: { red: true },
-        message: { red: true, dim: true },
-      }
-    )
-    .forEach((a) => {
-      oda.system(a);
-    });
+// Generic function to shutdown bot
+const shutdown = (signal: string) => (bot: Unity2Bot) => () => {
+  oda.bot(`${chalk.yellow(signal)} received…`);
+  oda.bot("gracefully shutting down…");
+  bot.stop();
+  oda.bot(chalk.green.underline("bye!"));
+};
 
-  oda.system(
-    oda.banner("ENVIRONMENT", {
-      cyan: true,
-    })
+// Map a signal to a function that shuts down the bot
+const captureShutdownSignal = (signal: string) =>
+  process.once(
+    signal,
+    flow(oda.clearTerminalLine, pipe(bot, shutdown(signal)))
   );
 
-  oda
-    .fromObjectToLabeledMessage(
-      {
-        NODE_ENV: useEnvOrDefault("NODE_ENV", "development"),
-      },
-      {
-        label: { cyan: true },
-        message: { cyan: true, dim: true },
-      }
-    )
-    .forEach((a) => oda.system(a));
+["SIGINT", "SIGTERM"].forEach(captureShutdownSignal);
 
-  // Check if the sqlite DB is actually a DB
-  oda.system(oda.banner("SQLITE", { green: true }));
-  try {
-    const sqlite = getDbInstance();
-    oda.system(
-      `SQLite DB found at ${chalk.green(sqlite.protocol)} - ${chalk.green(
-        CONSTANTS.DATABASE_URL
-      )}`
-    );
-  } catch (e) {
-    oda.system(
-      `Path ${chalk.red(CONSTANTS.DATABASE_URL)} is not a valid SQLite DB`
-    );
-    oda.system(`${chalk.red("Aborting…")}`);
-    process.exit(127);
-  }
+/* Disable debug mode in production - unless forced */
+const enableDebugMiddleware =
+  process.env.NODE_ENV !== "production" || process.env.UNITY2_DEBUG === "yes";
+if (enableDebugMiddleware) {
+  oda.bot(
+    `debug middleware is ${oda.onOff({
+      on: "enabled",
+      off: "disabled",
+    })(enableDebugMiddleware)}`
+  );
+  bot.use(DebugMiddleware);
+} else {
+  oda.bot(
+    `debug middleware is ${oda.onOff({
+      on: "enabled",
+      off: "disabled",
+    })(enableDebugMiddleware)}`
+  );
+}
 
-  /* Run migrations */
-  await migrateBot();
+/* Add modules */
+bot.use(SummaryModule);
 
+export async function run() {
   /* Setup Bot Instance */
-  const bot = new Bot(process.env.BOT_TOKEN);
 
-  /* Setup shutdown signal handling */
-
-  // Generic function to shutdown bot
-  const shutdown = (signal: string) => (bot: Bot) => () => {
-    oda.bot(`${chalk.yellow(signal)} received…`);
-    oda.bot("gracefully shutting down…");
-    bot.stop();
-    oda.bot(chalk.green.underline("bye!"));
-  };
-
-  // Map a signal to a function that shuts down the bot
-  const captureShutdownSignal = (signal: string) =>
-    process.once(
-      signal,
-      flow(oda.clearTerminalLine, pipe(bot, shutdown(signal)))
-    );
-
-  ["SIGINT", "SIGTERM"].forEach(captureShutdownSignal);
-
-  /* Disable debug mode in production */
-  if (
-    process.env.NODE_ENV !== "production" ||
-    process.env.UNITY2_DEBUG === "yes"
-  ) {
-    oda.bot("debug middleware enabled");
-    bot.use(DebugMiddleware);
-  }
-
-  /* Add modules */
-  bot.use(SummaryModule);
+  oda.bot(`Using bot token ${chalk.blue(process.env.BOT_TOKEN)}`);
 
   /* Start polling for messages */
   bot.start({
@@ -126,5 +77,3 @@ async function run() {
     },
   });
 }
-
-run();

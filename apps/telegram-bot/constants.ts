@@ -1,5 +1,5 @@
 import { resolve } from "path";
-import { useEnvOrDefault, useEnvOrNothing } from "./utils";
+import { useEnvOrAbort, useEnvOrDefault, useEnvOrNothing } from "./utils";
 
 export const APP_DIR = resolve(__dirname);
 export const DATABASE_URL = useEnvOrDefault(
@@ -7,3 +7,4 @@ export const DATABASE_URL = useEnvOrDefault(
   resolve(APP_DIR, "unity2.sqlite")
 );
 export const TURSO_TOKEN = useEnvOrNothing("TURSO_TOKEN");
+export const OPENAPI_KEY = useEnvOrAbort("OPENAPI_KEY");

@@ -1,22 +1,23 @@
 import chalk from "chalk";
+import { and, desc, eq, lte, sql } from "drizzle-orm";
+import { pipe } from "fp-ts/lib/function";
 import { CommandContext, Composer, Context, matchFilter } from "grammy";
 import { oda, withNext } from "grammy-utils";
 import { isAnyGroupChat } from "grammy-utils/filter-is-group";
 import { Message } from "grammy/types";
-import { summaryMessagesTable } from "./schema";
-import { flow } from "fp-ts/lib/function";
-import { contextReply } from "~/telegram/messages";
-import { and, eq } from "drizzle-orm";
-import { getDbInstance } from "~/db";
-import { drizzle } from "drizzle-orm/libsql";
+import { Unity2Context, Unity2Message } from "~/bot";
+import { chatGptClient } from "~/chatgpt/client";
+import { db } from "~/db";
+import {
+  contextReply,
+  deleteMessage,
+  replyToSender,
+} from "~/telegram/messages";
+import { TableSummaryMessages } from "./schema";
 
-const messagesDB = drizzle(getDbInstance(), {
-  schema: {
-    summary_messages: summaryMessagesTable,
-  },
-});
+const debug = oda.module.extend("summary");
 
-export const SummaryModule = new Composer();
+export const SummaryModule = new Composer<Unity2Context>();
 
 type ContextWithTextMessage = Context & { message: Message & { text: string } };
 
@@ -24,14 +25,14 @@ async function addMessageToSummaryQueue<T extends ContextWithTextMessage>(
   ctx: T
 ) {
   if (!ctx.chat) {
-    oda.bot(`no chat id`);
+    debug(`no chat id`);
     return;
   }
-  oda.bot(
+  debug(
     `adding text message to summary - ${chalk.blue(ctx.message.message_id)}`
   );
   const chatKey = String(ctx.chat.id);
-  await messagesDB.insert(summaryMessagesTable).values({
+  await db.insert(TableSummaryMessages).values({
     chat_id: chatKey,
     message_text: ctx.message.text,
   });
@@ -41,31 +42,69 @@ SummaryModule.drop(matchFilter("::bot_command"))
   .filter(isAnyGroupChat)
   .on("message:text", withNext(addMessageToSummaryQueue));
 
-const sendSummary = async (ctx: CommandContext<Context>) => {
+const sendSummary = async (ctx: CommandContext<Unity2Context>) => {
   if (!ctx.chat) {
-    oda.bot(`no chat id`);
+    debug(`no chat id`);
     return;
   }
   const chatKey = String(ctx.chat.id);
-  const messages = await messagesDB.query.summary_messages.findMany({
+  const messages = await db.query.summary_messages.findMany({
     where: and(
-      eq(summaryMessagesTable.chat_id, chatKey),
-      eq(summaryMessagesTable.is_summarized, false)
+      eq(TableSummaryMessages.chat_id, chatKey),
+      eq(TableSummaryMessages.is_summarized, false)
     ),
+    limit: 100,
+    orderBy: [desc(TableSummaryMessages.id)],
   });
   if (messages?.length === 0) {
     return contextReply("Sem mensagens pra fazer um resumo")(ctx);
   }
-  if (messages.length < 20) {
-    return contextReply("Sem mensagens suficientes pra fazer um resumo")(ctx);
-  }
-  return contextReply([...messages!].map((m) => m.message_text).join("\n"))(
-    ctx
-  );
+
+  const [lastMessage] = messages;
+
+  const messagesText = messages
+    .map((x) => x.message_text)
+    .reverse()
+    .join("\n");
+
+  const summaryMessage = await contextReply("Gerando resumo")(ctx);
+  const typingInterval = setInterval(async () => {
+    await ctx.replyWithChatAction("typing");
+  }, 5_000);
+
+  const res = await chatGptClient.sendMessage(messagesText, {
+    systemMessage:
+      "Vocé é um robô especialista em descobrir quais os principais assuntos de uma conversa. Trate cada linha como uma mensagem e identifique os tópicos discutidos. Faça um breve resumo de cada tópico discutido nas mensagens, usando um emoji pra identificar o assunto principal do tópico. Se um tópico foi mencionado poucas vezes, ele pode ser ignorado. Mantenha sua mensagem abaixo de 2000 caractes.",
+  });
+
+  clearInterval(typingInterval);
+
+  await deleteMessage(summaryMessage as Unity2Message);
+
+  // mark all messages as summarized so we can ignore them in the next summary
+  await db
+    .update(TableSummaryMessages)
+    .set({
+      is_summarized: true,
+    })
+    .where(lte(TableSummaryMessages.id, lastMessage.id));
+
+  await contextReply(res.text, {
+    ...replyToSender(ctx),
+  })(ctx);
+
+  return;
 };
 
 SummaryModule.filter(isAnyGroupChat).command("pauta", withNext(sendSummary));
 SummaryModule.drop(isAnyGroupChat).command(
   "pauta",
-  withNext(flow(contextReply("Esse comando só funciona em grupos")))
+  withNext((ctx) =>
+    pipe(
+      ctx,
+      contextReply("Esse comando só funciona em grupos", {
+        ...replyToSender(ctx),
+      })
+    )
+  )
 );

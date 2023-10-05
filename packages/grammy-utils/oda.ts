@@ -3,29 +3,30 @@ import chalk, {
   ForegroundColorName,
   ModifierName,
 } from "chalk";
-import { debug as d } from "debug";
+import debug, { debug as d } from "debug";
+import * as util from "util";
 
 const secrets = new Set<string>();
 
 const defaultDebugger = d(`unity2`);
 
-const createDebugger = (scope: string | string[]) => (message: string) => {
-  const finalMessage = [...secrets].reduce((message, secret) => {
-    const redactedSecret =
-      secret.substring(0, 2) +
-      "*".repeat(Math.max(0, Math.min(secret.length - 2, 8)));
-    return message.replace(secret, redactedSecret);
-  }, message);
-  if (Array.isArray(scope)) {
-    const scopedDebugger = scope.reduce((newDebugger, scope) => {
-      return newDebugger.extend(scope);
-    }, defaultDebugger);
-    return scopedDebugger(finalMessage);
-  }
-  return defaultDebugger.extend(scope)(finalMessage);
+const createDebugger = (scope: string) => {
+  const newDebugger = defaultDebugger.extend(scope);
+  newDebugger.log = function (message) {
+    const finalMessage = [...secrets]
+      .filter(Boolean)
+      .reduce((message, secret) => {
+        const redactedSecret =
+          secret.substring(0, 2) +
+          "*".repeat(Math.max(0, Math.min(secret.length - 2, 8)));
+        return message.replace(secret, redactedSecret);
+      }, message);
+    process.stderr.write(util.format(finalMessage + `\n`));
+  };
+  return newDebugger;
 };
 
-const scopes = ["bot", "telegram", "system"] as const;
+const scopes = ["bot", "telegram", "system", "module", "middleware"] as const;
 
 /**
  * Oda is a simple object that has a bunch of predefined debuggers
@@ -40,7 +41,7 @@ const debuggers = scopes.reduce((debuggers, scope) => {
   if (debuggers[scope]) return debuggers;
   debuggers[scope] = createDebugger(scope);
   return debuggers;
-}, {} as Record<(typeof scopes)[number], (message: string) => void>);
+}, {} as Record<(typeof scopes)[number], debug.Debugger>);
 
 /*
  * Add here the VALUES that you wish to remove from the logs
@@ -48,6 +49,8 @@ const debuggers = scopes.reduce((debuggers, scope) => {
  * external apis
  */
 const addDebugSecret = (secret: string) => secrets.add(secret);
+const addDebugSecrets = (...secrets: string[]) =>
+  secrets.forEach(addDebugSecret);
 
 const clearTerminalLine = () => {
   process.stdout.clearLine(0);
@@ -128,13 +131,29 @@ const fromObjectToLabeledMessage = (
     );
   });
 
+type OnOffOptions = {
+  on?: string;
+  off?: string;
+};
+
+function onOff(options?: OnOffOptions) {
+  const { on = "on", off = "off" } = options ?? {};
+  return function (value: boolean) {
+    if (value === true) {
+      return chalk.green(`${on} ✔`);
+    }
+    return chalk.red(`${off} ✘`);
+  };
+}
+
 export const oda = {
   clearTerminalLine,
   addDebugSecret,
+  addDebugSecrets,
+  onOff,
   banner,
   labeledMessage,
   fromObjectToLabeledMessage: fromObjectToLabeledMessage,
   ...debuggers,
-  debug: (message: string, scope: string | string[] = "debug") =>
-    createDebugger(scope)(message),
+  debug: defaultDebugger,
 };

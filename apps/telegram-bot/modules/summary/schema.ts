@@ -1,6 +1,6 @@
 import { index, integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
 
-export const summaryMessagesTable = sqliteTable(
+export const TableSummaryMessages = sqliteTable(
   "summary_messages",
   {
     id: integer("id").primaryKey(),

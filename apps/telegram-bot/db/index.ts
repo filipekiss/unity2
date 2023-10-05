@@ -1,15 +1,16 @@
 import { Client, createClient } from "@libsql/client";
+import { LibSQLDatabase, drizzle } from "drizzle-orm/libsql";
+import { JSDocUnknownTag } from "typescript";
 import { DATABASE_URL, TURSO_TOKEN } from "~/constants";
+import { TableSummaryMessages } from "~/modules/summary/schema";
 
-let dbInstance: Client;
+export const dbInstance = createClient({
+  url: DATABASE_URL,
+  authToken: TURSO_TOKEN,
+});
 
-export const getDbInstance = () => {
-  if (dbInstance) {
-    return dbInstance;
-  }
-  dbInstance = createClient({
-    url: DATABASE_URL,
-    authToken: TURSO_TOKEN,
-  });
-  return dbInstance;
-};
+export const db = drizzle(dbInstance, {
+  schema: {
+    summary_messages: TableSummaryMessages,
+  },
+});
