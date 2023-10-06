@@ -145,6 +145,10 @@ const sendSummary = async <
 
 SummaryModule.middleware
   .filter(isAnyGroupChat)
+  .command("pauta", async (ctx, next) => {
+    await sendSummary(ctx as CommandContext<Unity2.Context.With.User>);
+    await next();
+  })
   .use(
     limit({
       timeFrame: 15 * 1_000,
@@ -162,11 +166,7 @@ SummaryModule.middleware
         }
       },
     })
-  )
-  .command("pauta", async (ctx, next) => {
-    await sendSummary(ctx as CommandContext<Unity2.Context.With.User>);
-    await next();
-  });
+  );
 
 SummaryModule.middleware.drop(isAnyGroupChat).command(
   "pauta",
