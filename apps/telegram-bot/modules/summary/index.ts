@@ -50,6 +50,13 @@ const sendSummary = async <
     debug(`no chat id`);
     return;
   }
+
+  const rogerismosChance = Math.random();
+  if (rogerismosChance < 0.01) {
+    await sendMessage("Rogério fez rogerismos")(ctx);
+    return;
+  }
+
   oda
     .fromObjectToLabeledMessage({
       valid_until: String(Date.now() + 1000 * 60 * 60),
