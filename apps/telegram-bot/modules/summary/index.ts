@@ -1,11 +1,9 @@
 import chalk from "chalk";
-import { and, desc, eq, lte, sql } from "drizzle-orm";
+import { and, desc, eq, lte } from "drizzle-orm";
 import { pipe } from "fp-ts/lib/function";
-import { CommandContext, Composer, Context, matchFilter } from "grammy";
+import { matchFilter } from "grammy";
 import { oda, withNext } from "grammy-utils";
 import { isAnyGroupChat } from "grammy-utils/filter-is-group";
-import { Message } from "grammy/types";
-import { Unity2Context, Unity2Message } from "~/bot";
 import { chatGptClient } from "~/chatgpt/client";
 import { db } from "~/db";
 import {
@@ -13,17 +11,14 @@ import {
   deleteMessage,
   replyToSender,
 } from "~/telegram/messages";
+import { Unity2 } from "~/unity2";
 import { TableSummaryMessages } from "./schema";
 
 const debug = oda.module.extend("summary");
 
-export const SummaryModule = new Composer<Unity2Context>();
+export const SummaryModule = Unity2.createModule("Summary");
 
-type ContextWithTextMessage = Context & { message: Message & { text: string } };
-
-async function addMessageToSummaryQueue<T extends ContextWithTextMessage>(
-  ctx: T
-) {
+async function addMessageToSummaryQueue(ctx: Unity2.Context.With.TextMessage) {
   if (!ctx.chat) {
     debug(`no chat id`);
     return;
@@ -38,11 +33,12 @@ async function addMessageToSummaryQueue<T extends ContextWithTextMessage>(
   });
 }
 
-SummaryModule.drop(matchFilter("::bot_command"))
+SummaryModule.middleware
+  .drop(matchFilter("::bot_command"))
   .filter(isAnyGroupChat)
   .on("message:text", withNext(addMessageToSummaryQueue));
 
-const sendSummary = async (ctx: CommandContext<Unity2Context>) => {
+const sendSummary = async <TContext extends Unity2.Context>(ctx: TContext) => {
   if (!ctx.chat) {
     debug(`no chat id`);
     return;
@@ -79,7 +75,7 @@ const sendSummary = async (ctx: CommandContext<Unity2Context>) => {
 
   clearInterval(typingInterval);
 
-  await deleteMessage(summaryMessage as Unity2Message);
+  await deleteMessage(summaryMessage);
 
   // mark all messages as summarized so we can ignore them in the next summary
   await db
@@ -90,20 +86,25 @@ const sendSummary = async (ctx: CommandContext<Unity2Context>) => {
     .where(lte(TableSummaryMessages.id, lastMessage.id));
 
   await contextReply(res.text, {
-    ...replyToSender(ctx),
+    ...replyToSender(ctx.message as Unity2.Message),
   })(ctx);
 
   return;
 };
 
-SummaryModule.filter(isAnyGroupChat).command("pauta", withNext(sendSummary));
-SummaryModule.drop(isAnyGroupChat).command(
+SummaryModule.middleware
+  .filter(isAnyGroupChat)
+  .command("pauta", async (ctx, next) => {
+    await sendSummary(ctx);
+    await next();
+  });
+SummaryModule.middleware.drop(isAnyGroupChat).command(
   "pauta",
   withNext((ctx) =>
     pipe(
       ctx,
       contextReply("Esse comando só funciona em grupos", {
-        ...replyToSender(ctx),
+        ...replyToSender(ctx.message as Unity2.Message),
       })
     )
   )

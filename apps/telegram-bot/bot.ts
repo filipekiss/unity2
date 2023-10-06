@@ -1,24 +1,11 @@
-import { FileApiFlavor, FileFlavor } from "@grammyjs/files";
-import {
-  HydrateApiFlavor,
-  HydrateFlavor,
-  hydrateApi,
-  hydrateContext,
-} from "@grammyjs/hydrate";
+import { hydrateApi, hydrateContext } from "@grammyjs/hydrate";
 import chalk from "chalk";
-import { flow, pipe } from "fp-ts/lib/function";
-import { Api, Bot, Context } from "grammy";
+import { Bot } from "grammy";
 import { DebugMiddleware, oda } from "grammy-utils";
-import { SummaryModule } from "~/modules/summary";
+import { type Unity2 } from "./unity2";
+import { SummaryModule } from "./modules/summary";
 
-export type Unity2Context = HydrateFlavor<FileFlavor<Context>>;
-export type Unity2Api = HydrateApiFlavor<FileApiFlavor<Api>>;
-export type Unity2Bot = Bot<Unity2Context, Unity2Api>;
-export type Unity2Message = NonNullable<Unity2Context["msg"]>;
-export type Unity2User = NonNullable<Unity2Context["from"]>;
-export type Unity2Chat = NonNullable<Unity2Context["chat"]>;
-
-const bot = new Bot<Unity2Context, Unity2Api>(process.env.BOT_TOKEN);
+const bot = new Bot<Unity2.Context, Unity2.Api>(process.env.BOT_TOKEN);
 
 bot.use(hydrateContext());
 bot.api.config.use(hydrateApi());
@@ -26,19 +13,19 @@ bot.api.config.use(hydrateApi());
 /* Setup shutdown signal handling */
 
 // Generic function to shutdown bot
-const shutdown = (signal: string) => (bot: Unity2Bot) => () => {
+const shutdown = (signal: string) => (bot: Unity2.Bot) => async () => {
   oda.bot(`${chalk.yellow(signal)} received…`);
   oda.bot("gracefully shutting down…");
-  bot.stop();
+  await bot.stop();
   oda.bot(chalk.green.underline("bye!"));
 };
 
 // Map a signal to a function that shuts down the bot
 const captureShutdownSignal = (signal: string) =>
-  process.once(
-    signal,
-    flow(oda.clearTerminalLine, pipe(bot, shutdown(signal)))
-  );
+  process.once(signal, async () => {
+    oda.clearTerminalLine();
+    await shutdown(signal)(bot)();
+  });
 
 ["SIGINT", "SIGTERM"].forEach(captureShutdownSignal);
 
@@ -63,7 +50,7 @@ if (enableDebugMiddleware) {
 }
 
 /* Add modules */
-// bot.use(SummaryModule);
+bot.use(SummaryModule.middleware);
 
 export async function run() {
   /* Setup Bot Instance */

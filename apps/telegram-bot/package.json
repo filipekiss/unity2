@@ -8,21 +8,5 @@
     "sqlite:push": "bunx drizzle-kit push:sqlite",
     "sqlite:generate": "bunx drizzle-kit generate:sqlite",
     "sqlite:migrate": "bun ./scripts/migrate.ts"
-  },
-  "devDependencies": {
-    "@types/signale": "^1.4.4",
-    "bun-types": "latest",
-    "drizzle-kit": "^0.19.13",
-    "ts-node": "10.9.1"
-  },
-  "peerDependencies": {
-    "typescript": "^5.0.0"
-  },
-  "dependencies": {
-    "@grammyjs/files": "^1.0.4",
-    "@grammyjs/hydrate": "^1.3.1",
-    "chatgpt": "^5.2.5",
-    "drizzle-orm": "^0.28.6",
-    "fp-ts": "^2.16.1"
   }
 }

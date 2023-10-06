@@ -1,31 +1,31 @@
 import { Context } from "grammy";
-import { ApiMethods } from "grammy/types";
-import { Unity2Context, Unity2Message, Unity2User } from "~/bot";
+import { Unity2 } from "~/unity2";
 
-type Unity2ContextReplyArguments = Parameters<Unity2Context["reply"]>;
+type Unity2ContextReplyArguments = Parameters<Unity2.Context["reply"]>;
 
 export const contextReply =
   (message: string, options?: Unity2ContextReplyArguments[1]) =>
-  async (ctx: Context) =>
-    await ctx.reply(message, options);
+  async (ctx: Unity2.Context): Promise<Unity2.Message> =>
+    (await ctx.reply(message, options)) as Unity2.Message;
 
-export const replyToSender = (context: Unity2Context) => {
+export const replyToSender = <TMessage extends NonNullable<Context["message"]>>(
+  message: TMessage
+) => {
   return {
-    reply_to_message_id: context.message?.message_id,
+    reply_to_message_id: message.message_id,
   };
 };
 
-export const replyToReply = (context: Unity2Context) => {
+export const replyToReply = (message: Unity2.Message.With.Reply) => {
   return {
-    reply_to_message_id: context.message?.reply_to_message?.message_id,
+    reply_to_message_id: message.reply_to_message.message_id,
   };
 };
 
-export const replyToReplyOrToSender = (context: Unity2Context) => {
+export const replyToReplyOrToSender = (message: Unity2.Message) => {
   return {
     reply_to_message_id:
-      context.message?.reply_to_message?.message_id ??
-      context.message!.message_id,
+      message.reply_to_message?.message_id ?? message.message_id,
   };
 };
 
@@ -46,7 +46,7 @@ export const removeKeyboard = (): {
 };
 
 export const deleteMessage = async (
-  message: Unity2Message,
+  message: Unity2.Message,
   timeout: number = 0
 ) => {
   const delFn = async () => {
@@ -65,12 +65,12 @@ export const deleteMessage = async (
   }, timeout);
 };
 
-export const getMessageAuthor = (message: Unity2Message) => {
+export const getMessageAuthor = (message: Unity2.Message) => {
   return message.forward_from?.id
     ? message.forward_from
-    : (message.from as Unity2User);
+    : (message.from as Unity2.User);
 };
 
-export const getMessageDate = (message: Unity2Message) => {
+export const getMessageDate = (message: Unity2.Message) => {
   return message.forward_date ? message.forward_date : message.date;
 };
