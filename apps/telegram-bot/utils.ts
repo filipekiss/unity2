@@ -1,4 +1,5 @@
 import { IProcessEnv } from "./env";
+import { parse, differenceInMinutes } from "date-fns";
 
 let _is_production: boolean;
 export function isProduction() {
@@ -34,4 +35,8 @@ export function useEnvOrNothing(name: LooseAutocomplete<StringKeys>) {
   return process.env[name as string]
     ? (process.env[name as string] as string)
     : undefined;
+}
+
+export function minutesInBetween(earlier: number, later: number) {
+  return differenceInMinutes(earlier, later) * -1;
 }

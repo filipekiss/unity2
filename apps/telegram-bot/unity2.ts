@@ -6,7 +6,7 @@ import {
   Composer as ComposerBase,
   Context as ContextBase,
 } from "grammy";
-import { SetRequired } from "type-fest";
+import { SetNonNullable, SetRequired } from "type-fest";
 
 export declare namespace Unity2 {
   type Api = HydrateApiFlavor<FileApiFlavor<ApiBase>>;
@@ -17,12 +17,17 @@ export declare namespace Unity2 {
     namespace With {
       type ContextWith<TPropertyOrObject> =
         TPropertyOrObject extends keyof Unity2.Context
-          ? SetRequired<Unity2.Context, TPropertyOrObject>
+          ? SetNonNullable<
+              SetRequired<Unity2.Context, TPropertyOrObject>,
+              TPropertyOrObject
+            >
           : Unity2.Context & TPropertyOrObject;
       type Message = ContextWith<"message">;
       type TextMessage = ContextWith<{
         message: Message.With.Text;
       }>;
+      type User = ContextWith<{ from: User }>;
+      type Chat = ContextWith<{ chat: Chat }>;
     }
   }
   /* Message */

@@ -1,9 +1,22 @@
 import { Context } from "grammy";
+import { Message } from "grammy/types";
+import { SetRequired } from "type-fest";
 import { Unity2 } from "~/unity2";
 
 type Unity2ContextReplyArguments = Parameters<Unity2.Context["reply"]>;
 
-export const contextReply =
+export const replyWithMessage =
+  (
+    message: string,
+    options: SetRequired<
+      NonNullable<Unity2ContextReplyArguments[1]>,
+      "reply_to_message_id"
+    >
+  ) =>
+  async (ctx: Unity2.Context): Promise<Unity2.Message> =>
+    await sendMessage(message, options)(ctx);
+
+export const sendMessage =
   (message: string, options?: Unity2ContextReplyArguments[1]) =>
   async (ctx: Unity2.Context): Promise<Unity2.Message> =>
     (await ctx.reply(message, options)) as Unity2.Message;

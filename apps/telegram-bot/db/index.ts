@@ -1,8 +1,10 @@
-import { Client, createClient } from "@libsql/client";
-import { LibSQLDatabase, drizzle } from "drizzle-orm/libsql";
-import { JSDocUnknownTag } from "typescript";
+import { createClient } from "@libsql/client";
+import { drizzle } from "drizzle-orm/libsql";
 import { DATABASE_URL, TURSO_TOKEN } from "~/constants";
-import { TableSummaryMessages } from "~/modules/summary/schema";
+import {
+  TableGeneratedSummaries,
+  TableSummaryMessages,
+} from "~/modules/summary/schema";
 
 export const dbInstance = createClient({
   url: DATABASE_URL,
@@ -12,5 +14,6 @@ export const dbInstance = createClient({
 export const db = drizzle(dbInstance, {
   schema: {
     summary_messages: TableSummaryMessages,
+    summaries: TableGeneratedSummaries,
   },
 });

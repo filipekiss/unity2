@@ -1,18 +1,21 @@
 import chalk from "chalk";
 import { and, desc, eq, lte } from "drizzle-orm";
 import { pipe } from "fp-ts/lib/function";
-import { matchFilter } from "grammy";
+import { CommandContext, matchFilter } from "grammy";
 import { oda, withNext } from "grammy-utils";
 import { isAnyGroupChat } from "grammy-utils/filter-is-group";
 import { chatGptClient } from "~/chatgpt/client";
 import { db } from "~/db";
 import {
-  contextReply,
   deleteMessage,
   replyToSender,
+  replyWithMessage,
+  sendMessage,
 } from "~/telegram/messages";
 import { Unity2 } from "~/unity2";
-import { TableSummaryMessages } from "./schema";
+import { minutesInBetween } from "~/utils";
+import { TableGeneratedSummaries, TableSummaryMessages } from "./schema";
+import { limit } from "@grammyjs/ratelimiter";
 
 const debug = oda.module.extend("summary");
 
@@ -38,12 +41,42 @@ SummaryModule.middleware
   .filter(isAnyGroupChat)
   .on("message:text", withNext(addMessageToSummaryQueue));
 
-const sendSummary = async <TContext extends Unity2.Context>(ctx: TContext) => {
+const sendSummary = async <
+  TContext extends CommandContext<Unity2.Context.With.User>
+>(
+  ctx: TContext
+) => {
   if (!ctx.chat) {
     debug(`no chat id`);
     return;
   }
+  oda
+    .fromObjectToLabeledMessage({
+      valid_until: String(Date.now() + 1000 * 60 * 60),
+      created_at: String(Date.now()),
+    })
+    .forEach((x) => oda.debug(x));
   const chatKey = String(ctx.chat.id);
+  debug(`checking for existing summary - chatKey ${chatKey}`);
+  const hasValidSummary = await db.query.summaries.findFirst({
+    where: eq(TableGeneratedSummaries.chat_id, chatKey),
+  });
+
+  if (hasValidSummary) {
+    debug("found valid summary");
+    await replyWithMessage(
+      `Um resumo foi encontrado. Ele é válido por mais ${minutesInBetween(
+        Date.now(),
+        Number(hasValidSummary.valid_until)
+      )} minuto(s): \n\n${hasValidSummary.text}`,
+      replyToSender(ctx.message!)
+    )(ctx);
+
+    return;
+  }
+
+  // }}}---
+  // --{{{ Check if we can generate a new summary
   const messages = await db.query.summary_messages.findMany({
     where: and(
       eq(TableSummaryMessages.chat_id, chatKey),
@@ -52,32 +85,39 @@ const sendSummary = async <TContext extends Unity2.Context>(ctx: TContext) => {
     limit: 100,
     orderBy: [desc(TableSummaryMessages.id)],
   });
+
   if (messages?.length === 0) {
-    return contextReply("Sem mensagens pra fazer um resumo")(ctx);
+    debug.extend("ending")("no messages to summarize");
+    return replyWithMessage(
+      "Sem mensagens pra fazer um resumo",
+      replyToSender(ctx.message)
+    )(ctx);
   }
 
-  const [lastMessage] = messages;
+  const summaryMessage = await sendMessage("Gerando resumo")(ctx);
+  const typingInterval = setInterval(async () => {
+    await ctx.replyWithChatAction("typing");
+  }, 5_000);
 
   const messagesText = messages
     .map((x) => x.message_text)
     .reverse()
     .join("\n");
 
-  const summaryMessage = await contextReply("Gerando resumo")(ctx);
-  const typingInterval = setInterval(async () => {
-    await ctx.replyWithChatAction("typing");
-  }, 5_000);
-
+  debug("querying chatgpt");
   const res = await chatGptClient.sendMessage(messagesText, {
     systemMessage:
       "Vocé é um robô especialista em descobrir quais os principais assuntos de uma conversa. Trate cada linha como uma mensagem e identifique os tópicos discutidos. Faça um breve resumo de cada tópico discutido nas mensagens, usando um emoji pra identificar o assunto principal do tópico. Se um tópico foi mencionado poucas vezes, ele pode ser ignorado. Mantenha sua mensagem abaixo de 2000 caractes.",
   });
 
   clearInterval(typingInterval);
+  deleteMessage(summaryMessage);
 
-  await deleteMessage(summaryMessage);
+  // }}}---
 
-  // mark all messages as summarized so we can ignore them in the next summary
+  const [lastMessage] = messages;
+
+  debug("updating messages as summarized");
   await db
     .update(TableSummaryMessages)
     .set({
@@ -85,25 +125,58 @@ const sendSummary = async <TContext extends Unity2.Context>(ctx: TContext) => {
     })
     .where(lte(TableSummaryMessages.id, lastMessage.id));
 
-  await contextReply(res.text, {
+  debug("sending summary message");
+
+  const generatedSummaryMessage = await replyWithMessage(res.text, {
     ...replyToSender(ctx.message as Unity2.Message),
   })(ctx);
+
+  await db.insert(TableGeneratedSummaries).values({
+    chat_id: String(generatedSummaryMessage.chat.id),
+    telegram_user_id: String(ctx.from.id),
+    // Make it valid for one hour, in milliseconds
+    valid_until: String(Date.now() + 1000 * 60 * 60),
+    created_at: String(Date.now()),
+    text: res.text,
+  });
 
   return;
 };
 
 SummaryModule.middleware
   .filter(isAnyGroupChat)
+  .use(
+    limit({
+      timeFrame: 15 * 1_000,
+      limit: 1,
+      onLimitExceeded: async (ctx) => {
+        debug("summary limit exceeded");
+        await replyWithMessage(
+          "Este comando está desativado temporariamente",
+          replyToSender(ctx.message!)
+        )(ctx);
+      },
+      keyGenerator: (ctx) => {
+        if (ctx.hasChatType(["group", "supergroup"])) {
+          return ctx.chat.id.toString();
+        }
+        if (ctx.hasChatType("private")) {
+          return ctx.from.id.toString();
+        }
+      },
+    })
+  )
   .command("pauta", async (ctx, next) => {
-    await sendSummary(ctx);
+    await sendSummary(ctx as CommandContext<Unity2.Context.With.User>);
     await next();
   });
+
 SummaryModule.middleware.drop(isAnyGroupChat).command(
   "pauta",
   withNext((ctx) =>
     pipe(
       ctx,
-      contextReply("Esse comando só funciona em grupos", {
+      replyWithMessage("Esse comando só funciona em grupos", {
         ...replyToSender(ctx.message as Unity2.Message),
       })
     )
