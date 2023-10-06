@@ -25,7 +25,7 @@ export const replyToSender = <TMessage extends NonNullable<Context["message"]>>(
   message: TMessage
 ) => {
   return {
-    reply_to_message_id: message.message_id,
+    reply_to_message_id: message?.message_id,
   };
 };
 

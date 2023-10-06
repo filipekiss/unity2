@@ -151,10 +151,7 @@ SummaryModule.middleware
       limit: 1,
       onLimitExceeded: async (ctx) => {
         debug("summary limit exceeded");
-        await replyWithMessage(
-          "Este comando está desativado temporariamente",
-          replyToSender(ctx.message!)
-        )(ctx);
+        await sendMessage("Aguarde 15s antes de pedir um novo resumo")(ctx);
       },
       keyGenerator: (ctx) => {
         if (ctx.hasChatType(["group", "supergroup"])) {
