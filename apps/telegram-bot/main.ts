@@ -71,7 +71,24 @@ import { callbackify } from "sys";
 
   try {
     /* Run migrations */
-    await migrateBot();
+
+    /* If in production… */
+    if (process.env.NODE_ENV === "production") {
+      /* …and migrations are not allowed… */
+      if (process.env["UNITY2_ALLOW_MIGRATIONS"] !== "ALLOW") {
+        /* …then throw an error */
+        throw new Error(
+          "Migrations are not allowed in the current production environment."
+        );
+      }
+      /* Otherwise, run migrations */
+      await migrateBot();
+    } else {
+      /* If in development, run migrations only if enabled. Prefer `bun sqlite:push` */
+      if (process.env.UNITY2_ENABLE_DEV_MIGRATIONS === "yes") {
+        await migrateBot();
+      }
+    }
   } catch (e) {
     oda.system.extend("migrations")(
       chalk.red("\u2717 Error running migrations. Unity2 will shutdown")
