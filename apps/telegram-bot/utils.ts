@@ -38,5 +38,5 @@ export function useEnvOrNothing(name: LooseAutocomplete<StringKeys>) {
 }
 
 export function minutesInBetween(earlier: number, later: number) {
-  return differenceInMinutes(earlier, later) * -1;
+  return differenceInMinutes(later, earlier);
 }
