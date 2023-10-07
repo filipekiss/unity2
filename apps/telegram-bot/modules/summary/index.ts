@@ -138,7 +138,7 @@ const sendSummary = async <
   debug("querying chatgpt");
   const res = await chatGptClient.sendMessage(messagesText, {
     systemMessage:
-      "Vocé é um robô especialista em descobrir quais os principais assuntos de uma conversa. Trate cada linha como uma mensagem e identifique os tópicos discutidos. Faça um breve resumo de cada tópico discutido nas mensagens, usando um emoji pra identificar o assunto principal do tópico. Se um tópico foi mencionado poucas vezes, ele pode ser ignorado. Mantenha sua mensagem abaixo de 2000 caractes.",
+      "Vocé é um robô especialista em descobrir quais os principais assuntos de uma conversa. Trate cada linha como uma mensagem e identifique os tópicos discutidos. Faça um breve resumo de cada tópico discutido nas mensagens, usando um emoji pra identificar o assunto principal do tópico. Se um tópico foi mencionado poucas vezes, ele pode ser ignorado. Mantenha sua mensagem abaixo de 2000 caractes. Sempre que você for mencionar um usuário, use uma dessas palavras: 'Tchola', 'Twink', 'Mano', 'Animal'",
   });
 
   clearInterval(typingInterval);
