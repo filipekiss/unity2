@@ -76,26 +76,26 @@ export const replyToSender = <TMessage extends NonNullable<Context["message"]>>(
 ) => {
   return {
     reply_to_message_id: message?.message_id,
-  };
+  } as const;
 };
 
 export const replyToReply = (message: Unity2.Message.With.Reply) => {
   return {
     reply_to_message_id: message.reply_to_message.message_id,
-  };
+  } as const;
 };
 
 export const replyToReplyOrToSender = (message: Unity2.Message) => {
   return {
     reply_to_message_id:
       message.reply_to_message?.message_id ?? message.message_id,
-  };
+  } as const;
 };
 
 export const sendAsMarkdown = (): { parse_mode: "MarkdownV2" } => {
   return {
     parse_mode: "MarkdownV2",
-  };
+  } as const;
 };
 
 export const removeKeyboard = (): {
@@ -105,5 +105,5 @@ export const removeKeyboard = (): {
     reply_markup: {
       remove_keyboard: true,
     },
-  };
+  } as const;
 };

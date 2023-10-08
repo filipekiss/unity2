@@ -40,11 +40,6 @@ async function addMessageToSummaryQueue(ctx: Unity2.Context.With.TextMessage) {
   });
 }
 
-SummaryModule.middleware
-  .drop(matchFilter("::bot_command"))
-  .filter(isAnyGroupChat)
-  .on("message:text", withNext(addMessageToSummaryQueue));
-
 const sendSummary = async <
   TContext extends CommandContext<Unity2.Context.With.User>
 >(
@@ -124,56 +119,74 @@ const sendSummary = async <
       replyToSender(ctx.message)
     )(ctx);
   }
-
   const summaryMessage = await sendMessage("Gerando resumo")(ctx);
   const typingInterval = setInterval(async () => {
     await ctx.replyWithChatAction("typing");
   }, 5_000);
 
-  const messagesText = messages
-    .map((x) => x.message_text)
-    .reverse()
-    .join("\n");
+  try {
+    const messagesText = messages
+      .map((x) => x.message_text)
+      .reverse()
+      .join("\n");
 
-  debug("querying chatgpt");
-  const res = await chatGptClient.sendMessage(messagesText, {
-    systemMessage:
-      "Vocé é um robô especialista em descobrir quais os principais assuntos de uma conversa. Trate cada linha como uma mensagem e identifique os tópicos discutidos. Faça um breve resumo de cada tópico discutido nas mensagens, usando um emoji pra identificar o assunto principal do tópico. Se um tópico foi mencionado poucas vezes, ele pode ser ignorado. Mantenha sua mensagem abaixo de 2000 caractes. Sempre que você for mencionar um usuário, use uma dessas palavras: 'Tchola', 'Twink', 'Mano', 'Animal'",
-  });
+    debug("querying chatgpt");
+    const res = await chatGptClient.sendMessage(messagesText, {
+      systemMessage:
+        "Vocé é um robô especialista em descobrir quais os principais assuntos de uma conversa. Trate cada linha como uma mensagem e identifique os tópicos discutidos. Faça um breve resumo de cada tópico discutido nas mensagens, usando um emoji pra identificar o assunto principal do tópico. Se um tópico foi mencionado poucas vezes, ele pode ser ignorado. Mantenha sua mensagem abaixo de 2000 caractes. Sempre que você for falar sobre um usuário, use uma dessas palavras em vez do termo 'Usuário' ou 'Usuários': 'Tchola', 'Twink', 'Mano', 'Animal'. Você pode usar essas palavras também no plural. Tente misturar e usar vários desses termos ao longo do seu resumo.",
+    });
+    const [lastMessage] = messages;
 
-  clearInterval(typingInterval);
-  deleteMessage(summaryMessage);
+    debug("updating messages as summarized");
+    await db
+      .update(TableSummaryMessages)
+      .set({
+        is_summarized: true,
+      })
+      .where(lte(TableSummaryMessages.id, lastMessage.id));
+
+    debug("sending summary message");
+
+    const generatedSummaryMessage = await replyWithMessage(res.text, {
+      ...replyToSender(ctx.message as Unity2.Message),
+    })(ctx);
+
+    debug("saving summary message");
+    await db.insert(TableGeneratedSummaries).values({
+      chat_id: String(generatedSummaryMessage.chat.id),
+      telegram_user_id: String(ctx.from.id),
+      // Make it valid for one hour, in milliseconds
+      valid_until: String(Date.now() + 1000 * 60 * 60),
+      created_at: String(Date.now()),
+      text: res.text,
+    });
+  } catch (e) {
+    debug("error when querying chatgpt");
+    console.error(e);
+    const feedbackMessageOne = await replyWithMessage(
+      "Ocorreu um erro ao tentar gerar o resumo (provavelmente culpa do ChatGPT)",
+      replyToSender(ctx.message)
+    )(ctx);
+    deleteMessage(feedbackMessageOne, MILLISECONDS.SECOND * 10);
+    const feedbackMessageTwo = await replyWithMessage(
+      "Tente novamente daqui há alguns minutos",
+      replyToSender(ctx.message)
+    )(ctx);
+    deleteMessage(feedbackMessageTwo, MILLISECONDS.SECOND * 10);
+  } finally {
+    clearInterval(typingInterval);
+    deleteMessage(summaryMessage);
+  }
 
   // }}}---
 
-  const [lastMessage] = messages;
-
-  debug("updating messages as summarized");
-  await db
-    .update(TableSummaryMessages)
-    .set({
-      is_summarized: true,
-    })
-    .where(lte(TableSummaryMessages.id, lastMessage.id));
-
-  debug("sending summary message");
-
-  const generatedSummaryMessage = await replyWithMessage(res.text, {
-    ...replyToSender(ctx.message as Unity2.Message),
-  })(ctx);
-
-  debug("saving summary message");
-  await db.insert(TableGeneratedSummaries).values({
-    chat_id: String(generatedSummaryMessage.chat.id),
-    telegram_user_id: String(ctx.from.id),
-    // Make it valid for one hour, in milliseconds
-    valid_until: String(Date.now() + 1000 * 60 * 60),
-    created_at: String(Date.now()),
-    text: res.text,
-  });
-
   return;
 };
+
+SummaryModule.middleware
+  .drop(matchFilter("::bot_command"))
+  .filter(isAnyGroupChat)
+  .on("message:text", withNext(addMessageToSummaryQueue));
 
 SummaryModule.middleware
   .filter(isAnyGroupChat)
