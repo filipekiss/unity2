@@ -5,8 +5,6 @@ import { run } from "~/bot";
 import * as CONSTANTS from "~/constants";
 import { migrateBot } from "./scripts/migrate";
 import { useEnvOrDefault } from "./utils";
-import { dbInstance } from "./db";
-import { callbackify } from "sys";
 
 (async () => {
   const bot_banner = `                                                            
