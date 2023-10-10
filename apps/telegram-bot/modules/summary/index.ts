@@ -18,11 +18,16 @@ import {
 import { Unity2 } from "~/unity2";
 import { isProduction, minutesInBetween, useEnvOrDefault } from "~/utils";
 import { TableGeneratedSummaries, TableSummaryMessages } from "./schema";
-import { limit } from "@grammyjs/ratelimiter";
 import { MILLISECONDS } from "~/time";
 import { parse } from "date-fns";
 
 const debug = oda.module.extend("summary");
+
+type Timeout = {
+  next_usage: number;
+};
+
+const timeoutMapping = new Map<string, Timeout>();
 
 // You can configure this module using the env variables below.
 const SUMMARY_EXPIRATION = Number(
@@ -61,6 +66,23 @@ const sendSummary = async <
     debug(`no chat id`);
     return;
   }
+  const chatKey = String(ctx.chat.id);
+  debug(`checking command timeout (group ${chatKey})`);
+  const now = Date.now();
+  const groupTimeout = timeoutMapping.get(chatKey) ?? {
+    next_usage: 0,
+  };
+  if (now < groupTimeout.next_usage) {
+    debug.extend("ending")("command in timeout");
+    timeoutMapping.set(chatKey, {
+      ...groupTimeout,
+    });
+    return;
+  }
+  timeoutMapping.set(chatKey, {
+    next_usage: now + SUMMARY_COMMAND_RATE_LIMIT,
+  });
+
   debug("summary requested");
 
   const rogerismosChance = Math.random();
@@ -82,7 +104,6 @@ const sendSummary = async <
       .forEach((x) => oda.debug(x));
   }
 
-  const chatKey = String(ctx.chat.id);
   debug(`checking for existing summary - chatKey ${chatKey}`);
   const maybeSummary = await db.query.summaries.findFirst({
     where: and(
@@ -221,30 +242,6 @@ const summaryCommand = SummaryModule.middleware
     await sendSummary(ctx as CommandContext<Unity2.Context.With.User>);
     await next();
   });
-if (isProduction()) {
-  summaryCommand.use(
-    limit({
-      timeFrame: SUMMARY_COMMAND_RATE_LIMIT,
-      limit: 1,
-      onLimitExceeded: async (ctx) => {
-        debug(`summary limit exceeded (${SUMMARY_COMMAND_RATE_LIMIT})`);
-        await sendMessage(
-          `Aguarde ${
-            SUMMARY_COMMAND_RATE_LIMIT / MILLISECONDS.SECOND
-          }s antes de pedir um novo resumo`
-        )(ctx);
-      },
-      keyGenerator: (ctx) => {
-        if (ctx.hasChatType(["group", "supergroup"])) {
-          return ctx.chat.id.toString();
-        }
-        if (ctx.hasChatType("private")) {
-          return ctx.from.id.toString();
-        }
-      },
-    })
-  );
-}
 
 SummaryModule.middleware.drop(isAnyGroupChat).command(
   "pauta",
