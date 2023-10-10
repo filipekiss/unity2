@@ -13,7 +13,7 @@ type LooseAutocomplete<T extends string> = T | Omit<string, T>;
 type StringKeys = Extract<keyof IProcessEnv, string>;
 export function useEnvOrDefault(
   name: LooseAutocomplete<StringKeys>,
-  defaultValue?: string
+  defaultValue?: unknown
 ) {
   if (process.env[name as string] === undefined) {
     if (defaultValue !== undefined) {

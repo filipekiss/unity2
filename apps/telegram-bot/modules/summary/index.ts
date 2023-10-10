@@ -16,12 +16,24 @@ import {
   sendMessage,
 } from "~/telegram/messages";
 import { Unity2 } from "~/unity2";
-import { minutesInBetween } from "~/utils";
+import { isProduction, minutesInBetween, useEnvOrDefault } from "~/utils";
 import { TableGeneratedSummaries, TableSummaryMessages } from "./schema";
 import { limit } from "@grammyjs/ratelimiter";
 import { MILLISECONDS } from "~/time";
+import { parse } from "date-fns";
 
 const debug = oda.module.extend("summary");
+
+// You can configure this module using the env variables below.
+const SUMMARY_EXPIRATION = Number(
+  useEnvOrDefault("UNITY2_SUMMARY_EXPIRATION", MILLISECONDS.MINUTE * 30)
+);
+const SUMMARY_MESSAGE_COUNT = Number(
+  useEnvOrDefault("UNITY2_SUMMARY_MESSAGES_COUNT", 100)
+);
+const SUMMARY_COMMAND_RATE_LIMIT = Number(
+  useEnvOrDefault("UNITY2_SUMMARY_COMMAND_TIMEOUT", 15 * MILLISECONDS.SECOND)
+);
 
 export const SummaryModule = Unity2.createModule("Summary");
 
@@ -57,12 +69,18 @@ const sendSummary = async <
     return;
   }
 
-  oda
-    .fromObjectToLabeledMessage({
-      valid_until: String(Date.now() + MILLISECONDS.HOUR * 1),
-      created_at: String(Date.now()),
-    })
-    .forEach((x) => oda.debug(x));
+  if (!isProduction()) {
+    const now = Date.now();
+    oda
+      .fromObjectToLabeledMessage({
+        valid_until: String(now + SUMMARY_EXPIRATION),
+        created_at: String(now),
+        SUMMARY_COMMAND_RATE_LIMIT,
+        SUMMARY_MESSAGE_COUNT,
+        SUMMARY_EXPIRATION,
+      })
+      .forEach((x) => oda.debug(x));
+  }
 
   const chatKey = String(ctx.chat.id);
   debug(`checking for existing summary - chatKey ${chatKey}`);
@@ -102,13 +120,15 @@ const sendSummary = async <
 
   // }}}---
   // --{{{ Check if we can generate a new summary
-  debug("no valid summary found, looking for messages to summarize");
+  debug(
+    `no valid summary found, looking for messages to summarize (${SUMMARY_MESSAGE_COUNT} messages)`
+  );
   const messages = await db.query.summary_messages.findMany({
     where: and(
       eq(TableSummaryMessages.chat_id, chatKey),
       eq(TableSummaryMessages.is_summarized, false)
     ),
-    limit: 100,
+    limit: SUMMARY_MESSAGE_COUNT,
     orderBy: [desc(TableSummaryMessages.id)],
   });
 
@@ -152,12 +172,18 @@ const sendSummary = async <
       ...replyToSender(ctx.message as Unity2.Message),
     })(ctx);
 
-    debug("saving summary message");
+    debug(
+      `saving summary message (expires at ${parse(
+        String(Date.now() + SUMMARY_EXPIRATION),
+        "T",
+        new Date()
+      )})`
+    );
     await db.insert(TableGeneratedSummaries).values({
       chat_id: String(generatedSummaryMessage.chat.id),
       telegram_user_id: String(ctx.from.id),
       // Make it valid for one hour, in milliseconds
-      valid_until: String(Date.now() + 1000 * 60 * 60),
+      valid_until: String(Date.now() + SUMMARY_EXPIRATION),
       created_at: String(Date.now()),
       text: res.text,
     });
@@ -189,30 +215,36 @@ SummaryModule.middleware
   .filter(isAnyGroupChat)
   .on("message:text", withNext(addMessageToSummaryQueue));
 
-SummaryModule.middleware
+const summaryCommand = SummaryModule.middleware
   .filter(isAnyGroupChat)
   .command("pauta", async (ctx, next) => {
     await sendSummary(ctx as CommandContext<Unity2.Context.With.User>);
     await next();
   });
-// .use(
-//   limit({
-//     timeFrame: 15 * 1_000,
-//     limit: 1,
-//     onLimitExceeded: async (ctx) => {
-//       debug("summary limit exceeded");
-//       await sendMessage("Aguarde 15s antes de pedir um novo resumo")(ctx);
-//     },
-//     keyGenerator: (ctx) => {
-//       if (ctx.hasChatType(["group", "supergroup"])) {
-//         return ctx.chat.id.toString();
-//       }
-//       if (ctx.hasChatType("private")) {
-//         return ctx.from.id.toString();
-//       }
-//     },
-//   })
-// );
+if (isProduction()) {
+  summaryCommand.use(
+    limit({
+      timeFrame: SUMMARY_COMMAND_RATE_LIMIT,
+      limit: 1,
+      onLimitExceeded: async (ctx) => {
+        debug(`summary limit exceeded (${SUMMARY_COMMAND_RATE_LIMIT})`);
+        await sendMessage(
+          `Aguarde ${
+            SUMMARY_COMMAND_RATE_LIMIT / MILLISECONDS.SECOND
+          }s antes de pedir um novo resumo`
+        )(ctx);
+      },
+      keyGenerator: (ctx) => {
+        if (ctx.hasChatType(["group", "supergroup"])) {
+          return ctx.chat.id.toString();
+        }
+        if (ctx.hasChatType("private")) {
+          return ctx.from.id.toString();
+        }
+      },
+    })
+  );
+}
 
 SummaryModule.middleware.drop(isAnyGroupChat).command(
   "pauta",
