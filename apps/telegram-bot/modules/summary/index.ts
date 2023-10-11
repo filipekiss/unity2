@@ -40,6 +40,10 @@ const SUMMARY_COMMAND_RATE_LIMIT = Number(
   useEnvOrDefault("UNITY2_SUMMARY_COMMAND_TIMEOUT", 15 * MILLISECONDS.SECOND)
 );
 
+const SUMMARY_MINIMUM_MESSAGE_LENGTH = Number(
+  useEnvOrDefault("UNITY2_MINIMUM_MESSAGE_LENGTH", 15)
+);
+
 export const SummaryModule = Unity2.createModule("Summary");
 
 async function addMessageToSummaryQueue(ctx: Unity2.Context.With.TextMessage) {
@@ -54,6 +58,8 @@ async function addMessageToSummaryQueue(ctx: Unity2.Context.With.TextMessage) {
   await db.insert(TableSummaryMessages).values({
     chat_id: chatKey,
     message_text: ctx.message.text,
+    message_obj: ctx.message,
+    from: ctx.from as Unity2.User,
   });
 }
 
@@ -160,11 +166,8 @@ const sendSummary = async <
       replyToSender(ctx.message)
     )(ctx);
   }
+  debug(`summarizing ${messages.length} messages`);
   const summaryMessage = await sendMessage("Gerando resumo")(ctx);
-  const typingInterval = setInterval(async () => {
-    await ctx.replyWithChatAction("typing");
-  }, 5_000);
-
   try {
     const messagesText = messages
       .map((x) => x.message_text)
@@ -175,7 +178,7 @@ const sendSummary = async <
     const res = await chatGptClient.sendMessage(messagesText, {
       timeoutMs: MILLISECONDS.MINUTE * 2,
       systemMessage:
-        "Vocé é um robô especialista em descobrir quais os principais assuntos de uma conversa. Trate cada linha como uma mensagem e identifique os tópicos discutidos. Faça um breve resumo de cada tópico discutido nas mensagens, usando um emoji pra identificar o assunto principal do tópico. Se um tópico foi mencionado poucas vezes, ele pode ser ignorado. Mantenha sua mensagem abaixo de 2000 caractes. Sempre que você for falar sobre um usuário, use uma dessas palavras em vez do termo 'Usuário' ou 'Usuários': 'Tchola', 'Twink', 'Mano', 'Animal'. Você pode usar essas palavras também no plural. Tente misturar e usar vários desses termos ao longo do seu resumo.",
+        "Vocé é um robô especialista em descobrir quais os principais assuntos de uma conversa. Trate cada linha como uma mensagem e identifique os tópicos discutidos. Faça um breve resumo de cada tópico discutido nas mensagens, usando um emoji pra identificar o assunto principal do tópico. Se um tópico foi mencionado poucas vezes, ele pode ser ignorado. Mantenha sua mensagem abaixo de 2000 caracteres",
     });
     const [lastMessage] = messages;
 
@@ -222,7 +225,6 @@ const sendSummary = async <
     )(ctx);
     deleteMessage(feedbackMessageTwo, MILLISECONDS.SECOND * 10);
   } finally {
-    clearInterval(typingInterval);
     deleteMessage(summaryMessage);
   }
 
@@ -231,13 +233,30 @@ const sendSummary = async <
   return;
 };
 
+const withDebug = (
+  message: string,
+  predicate: (ctx: Unity2.Context) => boolean
+) => {
+  return (ctx: Unity2.Context) => {
+    debug.extend("with")(message);
+    return predicate(ctx);
+  };
+};
+
 SummaryModule.middleware
-  .drop(matchFilter("::bot_command"))
-  .drop(matchFilter("::spoiler"))
+  .drop(withDebug("dropping command", matchFilter("::bot_command")))
+  .drop(withDebug("dropping spoiler", matchFilter("::spoiler")))
+  .drop((ctx) => {
+    if ((ctx.message?.text?.length ?? 0) < SUMMARY_MINIMUM_MESSAGE_LENGTH) {
+      debug(`dropping short message (${ctx.message?.text?.length ?? 0})`);
+      return true;
+    }
+    return false;
+  })
   .filter(isAnyGroupChat)
   .on("message:text", withNext(addMessageToSummaryQueue));
 
-const summaryCommand = SummaryModule.middleware
+SummaryModule.middleware
   .filter(isAnyGroupChat)
   .command("pauta", async (ctx, next) => {
     await sendSummary(ctx as CommandContext<Unity2.Context.With.User>);

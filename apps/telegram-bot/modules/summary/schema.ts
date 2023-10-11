@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import { index, integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
+import { Unity2 } from "~/unity2";
 
 export const TableSummaryMessages = sqliteTable(
   "summary_messages",
@@ -10,6 +11,14 @@ export const TableSummaryMessages = sqliteTable(
     is_summarized: integer("is_summarized", { mode: "boolean" })
       .notNull()
       .default(false),
+    from: text("from", { mode: "json" })
+      .notNull()
+      .default("{}")
+      .$type<Unity2.User>(),
+    message_obj: text("message_obj", { mode: "json" })
+      .notNull()
+      .default("{}")
+      .$type<Unity2.Message>(),
   },
   (table) => {
     return {
