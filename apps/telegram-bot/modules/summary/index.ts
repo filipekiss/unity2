@@ -233,6 +233,7 @@ const sendSummary = async <
 
 SummaryModule.middleware
   .drop(matchFilter("::bot_command"))
+  .drop(matchFilter("::spoiler"))
   .filter(isAnyGroupChat)
   .on("message:text", withNext(addMessageToSummaryQueue));
 
