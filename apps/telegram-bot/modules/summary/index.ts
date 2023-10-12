@@ -1,25 +1,29 @@
 import chalk from "chalk";
+import { parse } from "date-fns";
 import { and, desc, eq, gt, lte } from "drizzle-orm";
 import { pipe } from "fp-ts/lib/function";
 import { CommandContext, matchFilter } from "grammy";
-import { oda, withNext } from "grammy-utils";
+import {
+    oda,
+    withNextMiddleware,
+    responseTimeMiddleware as responseTimeMiddlewareConfig,
+} from "grammy-utils";
 import { isAnyGroupChat } from "grammy-utils/filter-is-group";
 import { chatGptClient } from "~/chatgpt/client";
 import { db } from "~/db";
 import {
-  deleteMessage,
-  escapeForMarkdown,
-  lines,
-  replyToSender,
-  replyWithMessage,
-  sendAsMarkdown,
-  sendMessage,
+    deleteMessage,
+    escapeForMarkdown,
+    lines,
+    replyToSender,
+    replyWithMessage,
+    sendAsMarkdown,
+    sendMessage,
 } from "~/telegram/messages";
-import { Unity2 } from "~/unity2";
-import { isProduction, minutesInBetween, useEnvOrDefault } from "~/utils";
-import { TableGeneratedSummaries, TableSummaryMessages } from "./schema";
 import { MILLISECONDS } from "~/time";
-import { parse } from "date-fns";
+import { Unity2 } from "~/unity2";
+import { minutesInBetween, useEnvOrDefault } from "~/utils";
+import { TableGeneratedSummaries, TableSummaryMessages } from "./schema";
 
 const debug = oda.module.extend("summary");
 
@@ -97,19 +101,6 @@ const sendSummary = async <
     return;
   }
 
-  if (!isProduction()) {
-    const now = Date.now();
-    oda
-      .fromObjectToLabeledMessage({
-        valid_until: String(now + SUMMARY_EXPIRATION),
-        created_at: String(now),
-        SUMMARY_COMMAND_RATE_LIMIT,
-        SUMMARY_MESSAGE_COUNT,
-        SUMMARY_EXPIRATION,
-      })
-      .forEach((x) => oda.debug(x));
-  }
-
   debug(`checking for existing summary - chatKey ${chatKey}`);
   const maybeSummary = await db.query.summaries.findFirst({
     where: and(
@@ -137,7 +128,7 @@ const sendSummary = async <
         escapeForMarkdown(`⏰ ${validMinutesMessage}`)
       ),
       {
-        ...replyToSender(ctx.message!),
+        ...replyToSender(ctx.message as Unity2.Message),
         ...sendAsMarkdown(),
       }
     )(ctx);
@@ -233,19 +224,24 @@ const sendSummary = async <
   return;
 };
 
-const withDebug = (
+const debugPredicate = (
   message: string,
-  predicate: (ctx: Unity2.Context) => boolean
+  predicate: (ctx: Unity2.Context) => boolean | Promise<boolean>
 ) => {
-  return (ctx: Unity2.Context) => {
-    debug.extend("with")(message);
-    return predicate(ctx);
+  return async (ctx: Unity2.Context) => {
+    const result = await predicate(ctx);
+    if (result) {
+      debug.extend("with")(message);
+    }
+    return result;
   };
 };
 
+const responseTimeMiddleware = responseTimeMiddlewareConfig(debug);
+
 SummaryModule.middleware
-  .drop(withDebug("dropping command", matchFilter("::bot_command")))
-  .drop(withDebug("dropping spoiler", matchFilter("::spoiler")))
+  .drop(debugPredicate("dropping command", matchFilter("::bot_command")))
+  .drop(debugPredicate("dropping spoiler", matchFilter("::spoiler")))
   .drop((ctx) => {
     if ((ctx.message?.text?.length ?? 0) < SUMMARY_MINIMUM_MESSAGE_LENGTH) {
       debug(`dropping short message (${ctx.message?.text?.length ?? 0})`);
@@ -254,23 +250,28 @@ SummaryModule.middleware
     return false;
   })
   .filter(isAnyGroupChat)
-  .on("message:text", withNext(addMessageToSummaryQueue));
+  .use(responseTimeMiddleware("message"))
+  .on("message:text", withNextMiddleware(addMessageToSummaryQueue));
 
 SummaryModule.middleware
   .filter(isAnyGroupChat)
+  .command("pauta", responseTimeMiddleware("command:pauta"))
   .command("pauta", async (ctx, next) => {
     await sendSummary(ctx as CommandContext<Unity2.Context.With.User>);
     await next();
   });
 
-SummaryModule.middleware.drop(isAnyGroupChat).command(
-  "pauta",
-  withNext((ctx) =>
-    pipe(
-      ctx,
-      replyWithMessage("Esse comando só funciona em grupos", {
-        ...replyToSender(ctx.message as Unity2.Message),
-      })
+SummaryModule.middleware
+  .drop(isAnyGroupChat)
+  .use(responseTimeMiddleware("command"))
+  .command(
+    "pauta",
+    withNextMiddleware((ctx) =>
+      pipe(
+        ctx,
+        replyWithMessage("Esse comando só funciona em grupos", {
+          ...replyToSender(ctx.message as Unity2.Message),
+        })
+      )
     )
-  )
-);
+  );
