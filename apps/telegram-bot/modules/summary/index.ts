@@ -4,9 +4,10 @@ import { and, desc, eq, gt, lte } from "drizzle-orm";
 import { pipe } from "fp-ts/lib/function";
 import { CommandContext, matchFilter } from "grammy";
 import {
+    debugFilter as debugFilterBase,
     oda,
-    withNextMiddleware,
     responseTimeMiddleware as responseTimeMiddlewareConfig,
+    withNextMiddleware,
 } from "grammy-utils";
 import { isAnyGroupChat } from "grammy-utils/filter-is-group";
 import { chatGptClient } from "~/chatgpt/client";
@@ -223,38 +224,27 @@ const sendSummary = async <
 
   return;
 };
-
-const debugPredicate = (
-  message: string,
-  predicate: (ctx: Unity2.Context) => boolean | Promise<boolean>
-) => {
-  return async (ctx: Unity2.Context) => {
-    const result = await predicate(ctx);
-    if (result) {
-      debug.extend("with")(message);
-    }
-    return result;
-  };
-};
-
 const responseTimeMiddleware = responseTimeMiddlewareConfig(debug);
+const debugFilter = debugFilterBase(debug);
+const debugDrop = debugFilterBase(debug.extend("drop"));
 
 SummaryModule.middleware
-  .drop(debugPredicate("dropping command", matchFilter("::bot_command")))
-  .drop(debugPredicate("dropping spoiler", matchFilter("::spoiler")))
-  .drop((ctx) => {
-    if ((ctx.message?.text?.length ?? 0) < SUMMARY_MINIMUM_MESSAGE_LENGTH) {
-      debug(`dropping short message (${ctx.message?.text?.length ?? 0})`);
-      return true;
-    }
-    return false;
-  })
-  .filter(isAnyGroupChat)
+  .drop(debugDrop("command", matchFilter("::bot_command")))
+  .drop(debugDrop("spoiler", matchFilter("::spoiler")))
+  .drop(
+    debugDrop("drop:short message", (ctx) => {
+      if ((ctx.message?.text?.length ?? 0) < SUMMARY_MINIMUM_MESSAGE_LENGTH) {
+        return true;
+      }
+      return false;
+    })
+  )
+  .filter(debugFilter("group", isAnyGroupChat))
   .use(responseTimeMiddleware("message"))
   .on("message:text", withNextMiddleware(addMessageToSummaryQueue));
 
 SummaryModule.middleware
-  .filter(isAnyGroupChat)
+  .filter(debugFilter("group", isAnyGroupChat))
   .command("pauta", responseTimeMiddleware("command:pauta"))
   .command("pauta", async (ctx, next) => {
     await sendSummary(ctx as CommandContext<Unity2.Context.With.User>);
@@ -262,7 +252,7 @@ SummaryModule.middleware
   });
 
 SummaryModule.middleware
-  .drop(isAnyGroupChat)
+  .drop(debugDrop("group", isAnyGroupChat))
   .use(responseTimeMiddleware("command"))
   .command(
     "pauta",
