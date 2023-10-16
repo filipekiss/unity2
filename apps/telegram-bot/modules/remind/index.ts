@@ -3,11 +3,10 @@ import {
   format,
   getTime,
   minutesToMilliseconds,
-  parse,
   secondsToMilliseconds,
 } from "date-fns";
+import { and, eq, lt } from "drizzle-orm";
 import { pipe } from "fp-ts/lib/function";
-import { CommandContext } from "grammy";
 import {
   debugFilter as debugFilterBase,
   oda,
@@ -16,12 +15,12 @@ import {
 } from "grammy-utils";
 import { isAnyGroupChat } from "grammy-utils/filter-is-group";
 import { isReply } from "grammy-utils/filter-message";
+import { bot } from "~/bot";
 import { db } from "~/db";
 import {
   deleteMessage,
   escapeForMarkdown,
   mentionUserById,
-  replyToReply,
   replyToSender,
   replyWithMessage,
   sendAsMarkdown,
@@ -30,8 +29,6 @@ import { MILLISECONDS } from "~/time";
 import { Unity2 } from "~/unity2";
 import { parseTimeString } from "~/utils";
 import { TableReminders } from "./schema";
-import { and, eq, lt } from "drizzle-orm";
-import { bot } from "~/bot";
 
 const debug = oda.module.extend("remind");
 
@@ -94,15 +91,15 @@ RemindMeModule.middleware
       const parsedDate = parseTimeString(ctx.match);
       const now = Date.now();
       // check if reminder is at least 30min in the future
-      // if (differenceInMinutes(parsedDate, now) < 30) {
-      //   debug("short reminder duration");
-      //   await replyWithMessage(
-      //     `Lembrete mínimo: 30 minutos. Tente novamente`,
-      //     replyToSender(ctx.message!)
-      //   )(ctx);
-      //   await next();
-      //   return;
-      // }
+      if (differenceInMinutes(parsedDate, now) < 30) {
+        debug("short reminder duration");
+        await replyWithMessage(
+          `Lembrete mínimo: 30 minutos. Tente novamente`,
+          replyToSender(ctx.message!)
+        )(ctx);
+        await next();
+        return;
+      }
 
       debug("create reminder");
       await db.insert(TableReminders).values({
