@@ -1,6 +1,6 @@
 import { hydrateApi, hydrateContext } from "@grammyjs/hydrate";
 import chalk from "chalk";
-import { Bot } from "grammy";
+import { Bot, ErrorHandler } from "grammy";
 import { DebugMiddleware, oda } from "grammy-utils";
 import { type Unity2 } from "../unity2";
 import { SummaryModule } from "../modules/summary";
@@ -54,10 +54,12 @@ if (enableDebugMiddleware) {
 bot.use(SummaryModule.middleware);
 bot.use(RemindMeModule.middleware);
 
-export async function run() {
-  /* Setup Bot Instance */
-
-  oda.bot(`Using bot token ${chalk.blue(process.env.BOT_TOKEN)}`);
+export async function run(errorHandler?: ErrorHandler<Unity2.Context>) {
+  if (errorHandler) {
+    bot.catch(errorHandler);
+  } else {
+    oda.bot.extend("warning")("No error handler set");
+  }
 
   /* Start polling for messages */
   bot.start({

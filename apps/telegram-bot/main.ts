@@ -95,5 +95,8 @@ import { useEnvOrDefault } from "./utils";
     process.exit(127);
   }
 
-  await startBot();
+  await startBot((ctx) => {
+    oda.system.extend("error")("uncaught exception");
+    console.log({ ctx });
+  });
 })();

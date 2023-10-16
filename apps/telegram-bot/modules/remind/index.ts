@@ -84,6 +84,7 @@ RemindMeModule.middleware
         replyToSender(ctx.message!)
       )(ctx);
       deleteMessage(serviceMessage, secondsToMilliseconds(15));
+      await next();
       return;
     }
 
@@ -130,7 +131,6 @@ RemindMeModule.middleware
         )(ctx);
         deleteMessage(serviceMessage, secondsToMilliseconds(15));
       }
-    } finally {
       await next();
     }
   });
@@ -139,16 +139,19 @@ RemindMeModule.middleware
 RemindMeModule.middleware
   .filter(debugFilter("group", isAnyGroupChat))
   .drop(debugDrop("reply", isReply))
-  .command("lembrar", async (ctx) => {
-    debug("not a reply");
-    const serviceMessage = await replyWithMessage(
-      "Esse comando precisa ser uma resposta pra alguma mensagem. Tente novamente",
-      replyToSender(ctx.message as Unity2.Message)
-    )(ctx);
-    setTimeout(async () => {
-      await serviceMessage.delete();
-    }, MILLISECONDS.SECOND * 15);
-  });
+  .command(
+    "lembrar",
+    withNextMiddleware(async (ctx) => {
+      debug("not a reply");
+      const serviceMessage = await replyWithMessage(
+        "Esse comando precisa ser uma resposta pra alguma mensagem. Tente novamente",
+        replyToSender(ctx.message as Unity2.Message)
+      )(ctx);
+      setTimeout(async () => {
+        await serviceMessage.delete();
+      }, MILLISECONDS.SECOND * 15);
+    })
+  );
 
 // disaple in groups
 RemindMeModule.middleware
