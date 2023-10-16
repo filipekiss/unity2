@@ -1,7 +1,7 @@
 import chalk from "chalk";
 import { flow } from "fp-ts/lib/function";
 import { oda } from "grammy-utils";
-import { run } from "~/bot";
+import { run as startBot } from "~/bot";
 import * as CONSTANTS from "~/constants";
 import { migrateBot } from "./scripts/migrate";
 import { useEnvOrDefault } from "./utils";
@@ -95,5 +95,5 @@ import { useEnvOrDefault } from "./utils";
     process.exit(127);
   }
 
-  await run();
+  await startBot();
 })();

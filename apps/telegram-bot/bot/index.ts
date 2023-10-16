@@ -2,10 +2,11 @@ import { hydrateApi, hydrateContext } from "@grammyjs/hydrate";
 import chalk from "chalk";
 import { Bot } from "grammy";
 import { DebugMiddleware, oda } from "grammy-utils";
-import { type Unity2 } from "./unity2";
-import { SummaryModule } from "./modules/summary";
+import { type Unity2 } from "../unity2";
+import { SummaryModule } from "../modules/summary";
+import { RemindMeModule } from "../modules/remind";
 
-const bot = new Bot<Unity2.Context, Unity2.Api>(process.env.BOT_TOKEN);
+export const bot = new Bot<Unity2.Context, Unity2.Api>(process.env.BOT_TOKEN);
 
 bot.use(hydrateContext());
 bot.api.config.use(hydrateApi());
@@ -51,6 +52,7 @@ if (enableDebugMiddleware) {
 
 /* Add modules */
 bot.use(SummaryModule.middleware);
+bot.use(RemindMeModule.middleware);
 
 export async function run() {
   /* Setup Bot Instance */

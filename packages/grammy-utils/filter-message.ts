@@ -7,3 +7,7 @@ export function isFromBot(ctx: Context) {
 export function isBotCommand(ctx: Context) {
   return ctx.message?.text?.startsWith("/");
 }
+
+export const isReply = (ctx: Context) => {
+  return ctx.msg && ctx.msg.reply_to_message ? true : false;
+};

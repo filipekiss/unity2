@@ -69,6 +69,10 @@ export const deleteMessage = async (
   }, timeout);
 };
 
+export const mentionUserById = (user: Unity2.User) => {
+  return `[${user.first_name}](tg://user?id=${user.id})`;
+};
+
 /* Message option utilities */
 
 export const replyToSender = <TMessage extends NonNullable<Context["message"]>>(

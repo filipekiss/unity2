@@ -41,6 +41,7 @@ export declare namespace Unity2 {
       type Text = MessageWith<"text">;
       type Reply = MessageWith<"reply_to_message">;
     }
+    type Reply = Message.With.Reply["reply_to_message"];
   }
 
   type User = NonNullable<Context["from"]>;
