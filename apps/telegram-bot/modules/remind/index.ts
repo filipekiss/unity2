@@ -1,10 +1,12 @@
 import {
   differenceInMinutes,
   format,
+  formatRelative,
   getTime,
   minutesToMilliseconds,
   secondsToMilliseconds,
 } from "date-fns";
+import { ptBR } from "date-fns/locale";
 import { and, eq, lt } from "drizzle-orm";
 import { pipe } from "fp-ts/lib/function";
 import {
@@ -111,7 +113,9 @@ RemindMeModule.middleware
         from_id: ctx.from!.id.toString(),
       });
       await replyWithMessage(
-        `Você será lembrado em ${format(parsedDate, "dd/MM/yyyy HH:mm:ss")}`,
+        `Você será lembrado ${formatRelative(parsedDate, Date.now(), {
+          locale: ptBR,
+        })}`,
         replyToSender(ctx.message!)
       )(ctx);
     } catch (e: any) {
