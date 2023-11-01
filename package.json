@@ -1,11 +1,16 @@
 {
   "name": "unity2",
+  "version": "0.0.0",
   "module": "index.ts",
   "type": "module",
+  "scripts": {
+    "release": "commit-and-tag-version"
+  },
   "devDependencies": {
     "@types/debug": "^4.1.8",
     "@types/signale": "^1.4.4",
     "bun-types": "latest",
+    "commit-and-tag-version": "^12.0.0",
     "drizzle-kit": "^0.19.13",
     "prettier": "^3.0.3",
     "ts-node": "10.9.1",
@@ -29,5 +34,8 @@
   "workspaces": [
     "apps/*",
     "packages/*"
-  ]
+  ],
+  "commit-and-tag-version": {
+    "releaseCommitMessageFormat": "chore(version): v{{currentTag}}"
+  }
 }
